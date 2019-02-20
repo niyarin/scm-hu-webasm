@@ -131,4 +131,74 @@
                   )))))
       ))
 
+(define-library (niyarin scm-hu cps)
+   (import (scheme base)
+           (scheme cxr)
+           (niyarin scm-hu base))
+   (export scm-hu-cps)
 
+   (begin 
+      (define (not-have-continuation? expression)
+         (cond 
+           ((not (list? expression))
+               (list expression))
+           ((null? expression)
+               (list '()))
+           ((eq? (car expression) quote)
+            (list expression))
+           ((eq? (car expression) 'lambda)
+            (list (scm-hu-cps (caddr scm-code))))
+           (else 
+             #f)))
+
+      (define (scm-hu-cps scm-code)
+         (cond 
+           ((not-have-continuation? scm-code) =>  car)
+           (else
+              (let conv-loop ((code scm-code)
+                              (continuation-symbol  RETURN-TO-GLOBAL)
+                              (stack '()))
+               (cond
+                 ((not-have-continuation? code)
+                     => (lambda (not-continuation) (car not-continuation)))
+                 ((and (eq? (car  code)  'if) (not-have-continuation? (cadr code)))
+                  =>
+                  (lambda (test-exp)
+
+                    (set-car! (cdr code) (car test-exp))
+
+                    (let ((true-exp (conv-loop (caddr code) continuation-symbol stack)))
+                      (set-car! (cddr code) true-exp))
+
+                    (let ((false-exp (conv-loop (cadddr code) continuation-symbol stack)))
+                      (set-car! (cdddr code) false-exp))
+
+
+                     code
+                  ))
+                 (else 
+                   (let loop ((ls code))
+                     (cond 
+                       ((and (null? ls)  (null? stack));外側
+                        (set-cdr! 
+                          code
+                          (cons continuation-symbol (cdr code)))
+                        code)
+                       ((null? ls)
+                        (set-cdr!
+                          code
+                          (cons `(lambda (,(caar stack))  ,(conv-loop (cdar stack) continuation-symbol (cdr stack))) (cdr code)))
+                        code)
+                        
+                       ((not-have-continuation? (car ls))
+                        (loop (cdr ls)))
+                       (else;継続有り
+                         (let ((new-my-sym (gen-my-sym))
+                               (new-target-code (car ls)))
+
+                           (set-car! ls new-my-sym)
+                           (conv-loop new-target-code
+                                      continuation-symbol
+                                      (cons (cons new-my-sym code) stack ))))
+                       )
+                   )))))))))

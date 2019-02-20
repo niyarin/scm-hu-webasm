@@ -21,3 +21,114 @@
 
        (define RETURN-TO-GLOBAL (gen-my-sym))
      ))
+
+(define-library (niyarin scm-hu syntax-check-and-fix!)
+   (import (scheme base)
+           (scheme cxr)
+           (srfi 1)
+           (niyarin scm-hu base))
+
+   (export syntax-check-and-fix!)
+
+   (begin
+      (define (look-up-stack sym stack)
+          (fold 
+            (lambda ( renamer res) 
+              (if res 
+                res
+                 (assq sym renamer)))
+            #f 
+            stack))
+
+      (define (formals->symbol-list formals)
+        (let loop ((formals formals)
+                   (res '()))
+          (cond 
+            ((null? formals)
+             res)
+            ((symbol? formals)
+             (cons formals res))
+            ((list? formals)
+             (unless (symbol?(car formals))  (error "invalid formals" formals))
+             (loop (cdr formals) (cons (car formals) res) )))))
+
+
+      (define (syntax-check-and-fix! code)
+        (let loop ((code code)
+                   (rename-stack '()))
+
+          (when (list? code)
+              (let ((operator 
+                      (cond ((look-up-stack (car code) rename-stack) => cdr) (else (car code)))))
+                (case operator
+                  ((lambda) 
+
+                   (let SYNTAXCHECK ()
+                      (when 
+                        (or (not (list? code))
+                            (null? (cdr code))
+                            )
+                        (error "syntax error:lambda" code))
+
+
+                      (let ((formal-symbols (formals->symbol-list (cadr code)))) 
+                          (fold 
+                            (lambda (sym left-symbols ) 
+                              (when (memq left-symbols sym)
+                                 (error "duplicate parameter" (cadr code))))
+                            '()
+                            formal-symbols
+                            )))
+
+
+                   (when (null? (cddr code))
+                      (set-cdr! (cdr code)
+                        (list '())))
+
+                   (let ((rename-list 
+                           (fold 
+                             (lambda (x res) (if (memq x syntax-list) (cons (cons x (gen-my-sym)) res) res))
+                             '()
+                             (formals->symbol-list (cadr code)))))
+
+                     (let loop2 ((formals (if (symbol? (cadr code)) (cdr code) (cadr code))))
+                       (cond
+                         ((null? formals))
+                         ((list? (cdr formals))
+                           (cond ((assq (car formals) rename-list) => 
+                                    (lambda (rename-pair)
+                                      (set-car! formals (cdr rename-pair)))))
+                           (loop2 (cdr formals)))
+                         ((symbol? (cdr formals))
+                           (cond ((assq (car formals) rename-list) => 
+                                    (lambda (rename-pair)
+                                      (set-car! formals (cdr rename-pair))))))
+                           (cond ((assq (cdr formals) rename-list) => 
+                                    (lambda (rename-pair)
+                                      (set-cdr! formals (cdr rename-pair)))))))
+
+                     (loop (caddr code) (cons rename-list rename-stack))))
+                  ((quote)
+                     (when (or (not (list? code)) (null? (cdr code)) )
+                        (error "syntax error:quote" code)))
+                  (else
+                    (when (not (list? code))
+                        (error "syntax error"))
+
+                    (let loop2 ((ls code))
+                      (cond
+                        ((not (pair?  ls)))
+                        ((symbol? (car ls)) 
+                           (cond ((look-up-stack (car ls)  rename-stack) => 
+                                    (lambda (rename-pair)
+                                      (set-car! ls (cdr rename-pair)))))
+                           (loop2 (cdr ls)))
+                        (else
+                          (loop2 (car ls))
+                          (loop2 (cdr ls)))))
+                    )
+
+                  )))))
+      ))
+
+

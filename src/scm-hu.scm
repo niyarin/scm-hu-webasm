@@ -124,7 +124,7 @@
                                       (set-car! ls (cdr rename-pair)))))
                            (loop2 (cdr ls)))
                         (else
-                          (loop2 (car ls))
+                          (loop (car ls) rename-stack)
                           (loop2 (cdr ls)))))
                     )
 

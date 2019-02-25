@@ -111,6 +111,10 @@
                   ((quote)
                      (when (or (not (list? code)) (null? (cdr code)) )
                         (error "syntax error:quote" code)))
+                  ((define)
+                   (if (null? rename-stack);global?
+                     (loop (caddr code) '())
+                     ("Error: This Scheme imprementation does't support internal define")))
                   (else
                     (when (not (list? code))
                         (error "syntax error"))

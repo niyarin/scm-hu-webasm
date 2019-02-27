@@ -206,3 +206,40 @@
                                       (cons (cons new-my-sym code) stack ))))
                        )
                    )))))))))
+
+(define-library (niyarin scm-hu internal-representation1)
+   (import (scheme base) 
+           (srfi 69)
+           (niyarin scm-hu base))
+   (export scm-hu-convert-internal-representation)
+   (begin
+
+     (define PUT-CONST-VALUE (gen-my-sym))
+     (define PULL-CONST-VALUE (gen-my-sym))
+
+     (define (scm-hu-convert-internal-representation code const-size const-code global global-size local-size)
+         (let conv ((code code)
+                    (stack '()))
+           (cond 
+             ((not (list? code)) code)
+             ((eq? (car code) 'quote)
+              (set! const-code 
+                    (cons (list PUT-CONST-VALUE const-size (caddr code)) const-code))
+               (set! const-size (+ const-size 1))
+               (list PULL-CONST-VALUE (- const-size 1)))
+
+             ((eq? (car code) 'define)
+              (let* ((in-global-hash (hash-table-exists? global (cadr code)))
+                     (name-id
+                       (if in-global-hash
+                           (hash-table-ref gobal (cadr code))
+                           (begin (hash-table-set! global (cadr code) global-size)
+                                  (set! global-size  (+ global-size 1))
+                                  (hash-table-ref  global (cadr cdoe))))))
+                    (set-car! (cdr code) name-id)
+                    (conv (caddr code) stack)))
+             (else 
+               (map
+                 (lambda (o)
+                   (conv o stack))
+                 code)))))))

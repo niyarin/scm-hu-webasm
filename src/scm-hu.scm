@@ -16,7 +16,7 @@
          (let ((id-counter 0))
            (lambda ()
              (set! id-counter (+ id-counter 1))
-             (my-symbol id-counter)id-counter))
+             (my-symbol id-counter)))
          )
 
        (define RETURN-TO-GLOBAL (gen-my-sym))
@@ -209,37 +209,49 @@
 
 (define-library (niyarin scm-hu internal-representation1)
    (import (scheme base) 
+           (scheme cxr)
+           (scheme write)
            (srfi 69)
            (niyarin scm-hu base))
-   (export scm-hu-convert-internal-representation)
+   (export scm-hu-convert-internal-representation scm-hu-representation1-func-alist)
    (begin
+
+     (define (scm-hu-representation1-func-alist)
+       `((PUT-CONST-VALUE ,PUT-CONST-VALUE)
+         (PULL-CONST-VALUE ,PULL-CONST-VALUE)))
 
      (define PUT-CONST-VALUE (gen-my-sym))
      (define PULL-CONST-VALUE (gen-my-sym))
 
      (define (scm-hu-convert-internal-representation code const-size const-code global global-size local-size)
-         (let conv ((code code)
-                    (stack '()))
-           (cond 
-             ((not (list? code)) code)
-             ((eq? (car code) 'quote)
-              (set! const-code 
-                    (cons (list PUT-CONST-VALUE const-size (caddr code)) const-code))
-               (set! const-size (+ const-size 1))
-               (list PULL-CONST-VALUE (- const-size 1)))
 
-             ((eq? (car code) 'define)
-              (let* ((in-global-hash (hash-table-exists? global (cadr code)))
-                     (name-id
-                       (if in-global-hash
-                           (hash-table-ref gobal (cadr code))
-                           (begin (hash-table-set! global (cadr code) global-size)
-                                  (set! global-size  (+ global-size 1))
-                                  (hash-table-ref  global (cadr cdoe))))))
-                    (set-car! (cdr code) name-id)
-                    (conv (caddr code) stack)))
-             (else 
-               (map
-                 (lambda (o)
-                   (conv o stack))
-                 code)))))))
+         (let ((res
+            (let conv ((code code)
+                       (stack '()))
+              (cond 
+                ((not (list? code)) code)
+                ((eq? (car code) 'quote)
+                 (set! const-code 
+                       (cons (list PUT-CONST-VALUE const-size (cadr code)) const-code))
+                  (set! const-size (+ const-size 1))
+                  (list PULL-CONST-VALUE (- const-size 1)))
+               
+                ((eq? (car code) 'define)
+                    (let* ((in-global-hash (hash-table-exists? global (cadr code)))
+                        (name-id
+                          (if in-global-hash
+                              (hash-table-ref gobal (cadr code))
+                              (begin (hash-table-set! global (cadr code) global-size)
+                                     (set! global-size  (+ global-size 1))
+                                     (hash-table-ref  global (cadr code))))))
+                       (set-car! (cdr code) name-id)
+                       (set-car! (cddr code) (conv (caddr code) stack))
+                       code
+                       ))
+                (else 
+                  (map
+                    (lambda (o)
+                      (conv o stack))
+                    code))))))
+               res;TODO:const-codeとかあとで加える
+           ))))

@@ -1,7 +1,7 @@
 (define-library (niyarin scm-hu base)
    (import (scheme base))
 
-   (export my-symbol gen-my-sym RETURN-TO-GLOBAL syntax-list)
+   (export my-symbol gen-my-sym RETURN-TO-GLOBAL syntax-list my-symbol?)
    (begin
        (define-record-type <my-symbol>
             (my-symbol id)
@@ -212,23 +212,60 @@
            (scheme cxr)
            (scheme write)
            (srfi 69)
+           (only (srfi 1) fold iota)
            (niyarin scm-hu base))
+
+
    (export scm-hu-convert-internal-representation scm-hu-representation1-func-alist)
    (begin
 
      (define (scm-hu-representation1-func-alist)
        `((PUT-CONST-VALUE ,PUT-CONST-VALUE)
-         (PULL-CONST-VALUE ,PULL-CONST-VALUE)))
+         (PULL-CONST-VALUE ,PULL-CONST-VALUE)
+         (LOCAL-REF ,LOCAL-REF)
+         (GLOBAL-REF ,GLOBAL-REF)
+         ))
+
+
+     (define (scm-hu-representation1-lookup-local sym local-stack)
+       (fold
+         (lambda (a b)
+           (if b
+             b
+             (assq sym a)))
+          #f
+          local-stack))
+
+     (define (scm-hu-representation1-lookup sym global local-stack)
+       (cond
+          ((scm-hu-representation1-lookup-local sym local-stack)
+           =>
+           (lambda (x)
+             `(LOCAL-REF ,x)))
+          ((hash-table-exists? global sym)
+            `(GLOBAL-REF (hash-table-ref global sym)))
+          (else
+            (let ((res (hash-table-size global)))
+               (hash-table-set! global sym  res)
+               `(GLOBAL-REF ,res)))))
+
 
      (define PUT-CONST-VALUE (gen-my-sym))
      (define PULL-CONST-VALUE (gen-my-sym))
+     (define LOCAL-REF (gen-my-sym))
+     (define GLOBAL-REF (gen-my-sym))
 
-     (define (scm-hu-convert-internal-representation code const-size const-code global global-size local-size)
+     (define (scm-hu-convert-internal-representation code const-size const-code global local-size)
 
          (let ((res
             (let conv ((code code)
                        (stack '()))
               (cond 
+                ((or 
+                   (symbol? code)
+                   (my-symbol? code))
+                 (scm-hu-representation1-lookup code global stack))
+                 
                 ((not (list? code)) code)
                 ((eq? (car code) 'quote)
                  (set! const-code 
@@ -241,13 +278,35 @@
                         (name-id
                           (if in-global-hash
                               (hash-table-ref gobal (cadr code))
-                              (begin (hash-table-set! global (cadr code) global-size)
-                                     (set! global-size  (+ global-size 1))
+                              (begin (hash-table-set! global (cadr code) (hash-table-size global))
                                      (hash-table-ref  global (cadr code))))))
                        (set-car! (cdr code) name-id)
                        (set-car! (cddr code) (conv (caddr code) stack))
                        code
                        ))
+                ((eq? (car code) 'lambda)
+                  (let* ((current-local-size 
+                           (apply 
+                            +
+                            (map 
+                              (lambda (x)
+                                 (length x))
+                              stack)))
+                        (next-local-cell
+                          (map
+                            list
+                            (cadr code)
+                            (iota 
+                              (length (cadr code))
+                              current-local-size))))
+                    (set-car!
+                      (cdr code)
+                      (iota (length (cadr code))
+                            current-local-size))
+                    (set-car! 
+                      (cddr code)
+                      (conv (caddr code) (cons next-local-cell stack)))
+                    code))
                 (else 
                   (map
                     (lambda (o)

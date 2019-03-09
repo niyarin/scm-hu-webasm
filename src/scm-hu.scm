@@ -241,13 +241,13 @@
           ((scm-hu-representation1-lookup-local sym local-stack)
            =>
            (lambda (x)
-             `(LOCAL-REF ,x)))
+             (list LOCAL-REF ,x)))
           ((hash-table-exists? global sym)
             `(GLOBAL-REF (hash-table-ref global sym)))
           (else
             (let ((res (hash-table-size global)))
                (hash-table-set! global sym  res)
-               `(GLOBAL-REF ,res)))))
+               (list GLOBAL-REF res)))))
 
 
      (define PUT-CONST-VALUE (gen-my-sym))

@@ -307,6 +307,14 @@
                       (cddr code)
                       (conv (caddr code) (cons next-local-cell stack)))
                     code))
+                ((eq? (car code) 'begin)
+                  (let loop ((code (cdr code)))
+                    (unless (null? code)
+                        (set-car! 
+                          code
+                          (conv (car code) stack))
+                        (loop (cdr code))))
+                  code)
                 (else 
                   (map
                     (lambda (o)

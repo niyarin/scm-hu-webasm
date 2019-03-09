@@ -241,7 +241,7 @@
           ((scm-hu-representation1-lookup-local sym local-stack)
            =>
            (lambda (x)
-             (list LOCAL-REF ,x)))
+             (list LOCAL-REF x)))
           ((hash-table-exists? global sym)
             `(GLOBAL-REF (hash-table-ref global sym)))
           (else
